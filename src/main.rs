@@ -25,6 +25,11 @@ fn main() -> Result<()> {
 
             // Uncomment this block to pass the first stage
             println!("database page size: {}", page_size);
+
+            let mut bheader: [u8; 12] = [0; 12];
+            file.read_exact(&mut bheader)?;
+            let num_cells = u16::from_be_bytes([bheader[3], bheader[4]]);
+            println!("number of tables: {}", num_cells);
         }
         _ => bail!("Missing or invalid command passed: {}", command),
     }
