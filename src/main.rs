@@ -1,6 +1,68 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Error, Result};
 use std::fs::File;
 use std::io::prelude::*;
+
+struct Dbheader {
+    page_size: u16,
+}
+
+impl Dbheader {
+    fn parse<T: Read>(reader: &mut T) -> Result<Dbheader, Error> {
+        let mut buf = [0; 100];
+        reader.read_exact(&mut buf)?;
+        return Ok(Dbheader {
+            page_size: u16::from_be_bytes([buf[16], buf[17]]),
+        });
+    }
+}
+
+enum BTreePageType {
+    InteriorIndex,
+    InteriorTable,
+    LeafIndex,
+    LeafTable,
+}
+#[allow(dead_code)]
+struct BTreeHeader {
+    page_type: BTreePageType,
+    first_free_block: u16,
+    num_cells: u16,
+    cell_content_offset: u16,
+    fragmented_free_bytes: u8,
+    rightmost_pointer: Option<u32>,
+}
+
+impl BTreeHeader {
+    fn parse<T: Read>(reader: &mut T) -> Result<BTreeHeader, Error> {
+        let mut buf = [0; 12];
+        reader.read_exact(&mut buf)?;
+        let page_type: BTreePageType = match buf[0] {
+            0x02 => BTreePageType::InteriorIndex,
+            0x05 => BTreePageType::InteriorTable,
+            0x0a => BTreePageType::LeafIndex,
+            0x0d => BTreePageType::LeafTable,
+            _ => bail!("Invalid B-Tree Page Type"),
+        };
+
+        // The four-byte page number at offset 8 is the right-most pointer.
+        // This value appears in the header of interior b-tree pages only and is omitted from all other pages.
+        let rightmost_pointer = match page_type {
+            BTreePageType::InteriorIndex | BTreePageType::InteriorTable => Some(
+                u32::from_be_bytes(buf[8..12].try_into().expect("incorrect range size")),
+            ),
+            BTreePageType::LeafIndex | BTreePageType::LeafTable => None,
+        };
+
+        return Ok(BTreeHeader {
+            page_type,
+            first_free_block: u16::from_be_bytes([buf[1], buf[2]]),
+            num_cells: u16::from_be_bytes([buf[3], buf[4]]),
+            cell_content_offset: u16::from_be_bytes([buf[5], buf[6]]),
+            fragmented_free_bytes: u8::from_be_bytes([buf[7]]),
+            rightmost_pointer,
+        });
+    }
+}
 
 fn main() -> Result<()> {
     // Parse arguments
@@ -16,20 +78,12 @@ fn main() -> Result<()> {
     match command.as_str() {
         ".dbinfo" => {
             let mut file = File::open(&args[1])?;
-            let mut header = [0; 100];
-            file.read_exact(&mut header)?;
 
-            // The page size is stored at the 16th byte offset, using 2 bytes in big-endian order
-            #[allow(unused_variables)]
-            let page_size = u16::from_be_bytes([header[16], header[17]]);
+            let dbheader = Dbheader::parse(&mut file)?;
+            println!("database page size: {}", dbheader.page_size);
 
-            // Uncomment this block to pass the first stage
-            println!("database page size: {}", page_size);
-
-            let mut bheader: [u8; 12] = [0; 12];
-            file.read_exact(&mut bheader)?;
-            let num_cells = u16::from_be_bytes([bheader[3], bheader[4]]);
-            println!("number of tables: {}", num_cells);
+            let btreeheader = BTreeHeader::parse(&mut file)?;
+            println!("number of tables: {}", btreeheader.num_cells);
         }
         _ => bail!("Missing or invalid command passed: {}", command),
     }
