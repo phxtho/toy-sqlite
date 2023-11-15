@@ -1,6 +1,6 @@
 use anyhow::{bail, Error, Result};
 use std::fs::File;
-use std::io::prelude::*;
+use std::io::{prelude::*, SeekFrom};
 
 struct Dbheader {
     page_size: u16,
@@ -26,7 +26,7 @@ enum BTreePageType {
 struct BTreeHeader {
     page_type: BTreePageType,
     first_free_block: u16,
-    num_cells: u16,
+    cell_count: u16,
     cell_content_offset: u16,
     fragmented_free_bytes: u8,
     rightmost_pointer: Option<u32>,
@@ -56,12 +56,73 @@ impl BTreeHeader {
         return Ok(BTreeHeader {
             page_type,
             first_free_block: u16::from_be_bytes([buf[1], buf[2]]),
-            num_cells: u16::from_be_bytes([buf[3], buf[4]]),
+            cell_count: u16::from_be_bytes([buf[3], buf[4]]),
             cell_content_offset: u16::from_be_bytes([buf[5], buf[6]]),
             fragmented_free_bytes: u8::from_be_bytes([buf[7]]),
             rightmost_pointer,
         });
     }
+}
+
+struct Record {
+    payload_size: u64, // varints
+    row_id: u64,
+    payload: Vec<u8>,
+}
+
+impl Record {
+    fn parse<T: Read>(reader: &mut T) -> Result<Self, Error> {
+        let payload_size = read_varint(reader);
+        let row_id = read_varint(reader);
+        let mut payload = vec![0; payload_size as usize];
+        reader.read_exact(&mut payload)?;
+        return Ok(Record {
+            payload_size,
+            row_id,
+            payload,
+        });
+    }
+}
+
+fn read_varint<T: Read>(reader: &mut T) -> u64 {
+    let mut read_more = true;
+    let mut result: u64 = 0;
+
+    while read_more {
+        // read first byte
+        let mut buf = [0u8; 1];
+        reader.read_exact(&mut buf).expect("failed to read varint");
+        // check high bit for continuation
+        let high_bit = buf[0] & 0b1000_0000;
+        read_more = high_bit != 0;
+
+        // make space for next 7 bits
+        result <<= 7;
+        // isolate low 7 bits and add to result
+        let low_bits = buf[0] & 0b0111_1111;
+        result |= low_bits as u64;
+    }
+
+    return result;
+}
+
+#[test]
+fn test_read_varint() {
+    let mut buf = std::io::Cursor::new(vec![0b0000_0001, 0b0000_0001]);
+    assert_eq!(read_varint(&mut buf), 1);
+    assert_eq!(read_varint(&mut buf), 1);
+}
+
+#[test]
+fn test_read_varint_reading_zero() {
+    let mut buf = std::io::Cursor::new(vec![0b0000]);
+    assert_eq!(read_varint(&mut buf), 0);
+}
+
+#[test]
+fn test_read_varint_reading_continuation_bits() {
+    let mut buf = std::io::Cursor::new(vec![0b10000111, 0b01101000]);
+    assert_eq!(read_varint(&mut buf), 1000);
 }
 
 fn main() -> Result<()> {
@@ -75,15 +136,29 @@ fn main() -> Result<()> {
 
     // Parse command and act accordingly
     let command = &args[2];
+
+    let mut file = File::open(&args[1])?;
+    let dbheader = Dbheader::parse(&mut file)?;
+    let btreeheader = BTreeHeader::parse(&mut file)?;
+
     match command.as_str() {
         ".dbinfo" => {
-            let mut file = File::open(&args[1])?;
-
-            let dbheader = Dbheader::parse(&mut file)?;
             println!("database page size: {}", dbheader.page_size);
+            println!("number of tables: {}", btreeheader.cell_count);
+        }
+        "table" => {
+            let mut cell_pointers: Vec<u16> = vec![];
+            for _ in 0..btreeheader.cell_count {
+                let mut buf = [0; 2];
+                file.read_exact(&mut buf)?;
+                cell_pointers.push(u16::from_be_bytes(buf));
+            }
 
-            let btreeheader = BTreeHeader::parse(&mut file)?;
-            println!("number of tables: {}", btreeheader.num_cells);
+            for ptr in cell_pointers {
+                let seek_pos = SeekFrom::Start(ptr as u64);
+                file.seek(seek_pos).expect("failed to seek in file");
+                let record = Record::parse(&mut file);
+            }
         }
         _ => bail!("Missing or invalid command passed: {}", command),
     }
