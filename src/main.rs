@@ -63,35 +63,83 @@ impl BTreeHeader {
         });
     }
 }
-
-struct Record {
-    payload_size: u64, // varints
-    row_id: u64,
-    payload: Vec<u8>,
+enum SerialType {
+    Null,
+    Int8,
+    Int16,
+    Int24,
+    Int32,
+    Int48,
+    Int64,
+    Float64,
+    Zero, // schema format 4 or higher
+    One,  // schema format 4 or higher
+    Blob(usize),
+    Text(usize),
 }
 
-impl Record {
-    fn parse<T: Read>(reader: &mut T) -> Result<Self, Error> {
-        let payload_size = read_varint(reader);
-        let row_id = read_varint(reader);
-        let mut payload = vec![0; payload_size as usize];
-        reader.read_exact(&mut payload)?;
-        return Ok(Record {
-            payload_size,
-            row_id,
-            payload,
-        });
+impl From<u64> for SerialType {
+    fn from(value: u64) -> Self {
+        match value {
+            0 => SerialType::Null,
+            1 => SerialType::Int8,
+            2 => SerialType::Int16,
+            3 => SerialType::Int24,
+            4 => SerialType::Int32,
+            5 => SerialType::Int48,
+            6 => SerialType::Int64,
+            8 => SerialType::Zero,
+            9 => SerialType::One,
+            value => {
+                if value >= 12 && value % 2 == 0 {
+                    SerialType::Blob(((value - 12) / 2) as usize)
+                } else if value >= 13 && value % 2 == 1 {
+                    SerialType::Text(((value - 13) / 2) as usize)
+                } else {
+                    panic!("Invalide serial type encoding {}", value);
+                }
+            }
+        }
     }
 }
 
-fn read_varint<T: Read>(reader: &mut T) -> u64 {
+struct RecordHeader {
+    size: u64, // size of the record header including this field
+    column_types: Vec<SerialType>,
+}
+
+impl RecordHeader {
+    fn parse<T: Read>(reader: &mut T) {
+        let (size, b) = read_varint(reader);
+        let mut bytes_read = b;
+        let mut column_types: Vec<SerialType> = vec![];
+
+        while bytes_read < size {
+            let (type_encoding, b) = read_varint(reader);
+            bytes_read += b;
+            column_types.push(SerialType::from(type_encoding));
+        }
+
+        RecordHeader { size, column_types };
+    }
+}
+
+struct Record {
+    header: RecordHeader,
+    body: Vec<u8>,
+}
+
+fn read_varint<T: Read>(reader: &mut T) -> (u64, u64) {
     let mut read_more = true;
     let mut result: u64 = 0;
+    let mut bytes_read = 0;
 
     while read_more {
         // read first byte
         let mut buf = [0u8; 1];
         reader.read_exact(&mut buf).expect("failed to read varint");
+        bytes_read += 1;
+
         // check high bit for continuation
         let high_bit = buf[0] & 0b1000_0000;
         read_more = high_bit != 0;
@@ -103,26 +151,26 @@ fn read_varint<T: Read>(reader: &mut T) -> u64 {
         result |= low_bits as u64;
     }
 
-    return result;
+    return (result, bytes_read);
 }
 
 #[test]
 fn test_read_varint() {
     let mut buf = std::io::Cursor::new(vec![0b0000_0001, 0b0000_0001]);
-    assert_eq!(read_varint(&mut buf), 1);
-    assert_eq!(read_varint(&mut buf), 1);
+    assert_eq!(read_varint(&mut buf), (1, 1));
+    assert_eq!(read_varint(&mut buf), (1, 1));
 }
 
 #[test]
 fn test_read_varint_reading_zero() {
     let mut buf = std::io::Cursor::new(vec![0b0000]);
-    assert_eq!(read_varint(&mut buf), 0);
+    assert_eq!(read_varint(&mut buf), (0, 1));
 }
 
 #[test]
 fn test_read_varint_reading_continuation_bits() {
     let mut buf = std::io::Cursor::new(vec![0b10000111, 0b01101000]);
-    assert_eq!(read_varint(&mut buf), 1000);
+    assert_eq!(read_varint(&mut buf), (1000, 2));
 }
 
 fn main() -> Result<()> {
