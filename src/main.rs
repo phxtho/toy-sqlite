@@ -63,6 +63,36 @@ impl BTreeHeader {
         });
     }
 }
+
+struct RecordHeader {
+    size: u64,
+    row_id: u64,
+}
+
+struct Record {
+    header: RecordHeader,
+    column_header: ColumnHeader,
+    payload: Vec<u8>,
+}
+
+impl Record {
+    fn parse<T: Read>(reader: &mut T) -> Self {
+        let (size, _) = read_varint(reader);
+        let (row_id, _) = read_varint(reader);
+        let header = RecordHeader { size, row_id };
+        let column_header = ColumnHeader::parse(reader);
+        let mut payload = vec![0; (size - column_header.size) as usize];
+        reader
+            .read_exact(&mut payload)
+            .expect("failed to read payload from reader");
+        Record {
+            header,
+            column_header,
+            payload,
+        }
+    }
+}
+
 enum SerialType {
     Null,
     Int8,
@@ -103,13 +133,13 @@ impl From<u64> for SerialType {
     }
 }
 
-struct RecordHeader {
-    size: u64, // size of the record header including this field
+struct ColumnHeader {
+    size: u64, // size of the column header including this field
     column_types: Vec<SerialType>,
 }
 
-impl RecordHeader {
-    fn parse<T: Read>(reader: &mut T) {
+impl ColumnHeader {
+    fn parse<T: Read>(reader: &mut T) -> Self {
         let (size, b) = read_varint(reader);
         let mut bytes_read = b;
         let mut column_types: Vec<SerialType> = vec![];
@@ -120,13 +150,8 @@ impl RecordHeader {
             column_types.push(SerialType::from(type_encoding));
         }
 
-        RecordHeader { size, column_types };
+        return ColumnHeader { size, column_types };
     }
-}
-
-struct Record {
-    header: RecordHeader,
-    body: Vec<u8>,
 }
 
 fn read_varint<T: Read>(reader: &mut T) -> (u64, u64) {
@@ -202,10 +227,12 @@ fn main() -> Result<()> {
                 cell_pointers.push(u16::from_be_bytes(buf));
             }
 
+            let mut records: Vec<Record> = vec![];
             for ptr in cell_pointers {
                 let seek_pos = SeekFrom::Start(ptr as u64);
                 file.seek(seek_pos).expect("failed to seek in file");
                 let record = Record::parse(&mut file);
+                records.push(record)
             }
         }
         _ => bail!("Missing or invalid command passed: {}", command),
