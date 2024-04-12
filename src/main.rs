@@ -53,14 +53,14 @@ impl BTreeHeader {
             BTreePageType::LeafIndex | BTreePageType::LeafTable => None,
         };
 
-        return Ok(BTreeHeader {
+        Ok(BTreeHeader {
             page_type,
             first_free_block: u16::from_be_bytes([buf[1], buf[2]]),
             cell_count: u16::from_be_bytes([buf[3], buf[4]]),
             cell_content_offset: u16::from_be_bytes([buf[5], buf[6]]),
             fragmented_free_bytes: u8::from_be_bytes([buf[7]]),
             rightmost_pointer,
-        });
+        })
     }
 }
 
@@ -72,7 +72,7 @@ struct RecordHeader {
 struct Record {
     header: RecordHeader,
     column_header: ColumnHeader,
-    payload: Vec<u8>,
+    values: Vec<Value>,
 }
 
 impl Record {
@@ -85,14 +85,56 @@ impl Record {
         reader
             .read_exact(&mut payload)
             .expect("failed to read payload from reader");
+        let mut values = vec![];
+
+        for serial_type in column_header.column_types.clone() {
+            values.push(parse_value(reader, serial_type))
+        }
         Record {
             header,
             column_header,
-            payload,
+            values,
         }
     }
 }
 
+fn parse_value<T: Read>(reader: &mut T, serial_type: SerialType) -> Value {
+    match serial_type {
+        SerialType::Int8
+        | SerialType::Int16
+        | SerialType::Int24
+        | SerialType::Int32
+        | SerialType::Int48
+        | SerialType::Int64 => {
+            let mut buf = vec![0u8; SerialType::size(serial_type)];
+            reader.read_exact(&mut buf);
+            Value::Int(i64::from_be_bytes(
+                buf.try_into().expect("couldn't convert vec to array"),
+            ))
+        }
+        SerialType::Zero => Value::Int(0),
+        SerialType::One => Value::Int(1),
+        SerialType::Float64 => {
+            let mut buf = [0u8; 8];
+            reader.read_exact(&mut buf);
+            Value::Float(f64::from_be_bytes(buf))
+        }
+        SerialType::Blob(size) => {
+            let mut buf = vec![0u8; size];
+            reader.read_exact(&mut buf);
+            Value::Blob(buf)
+        }
+        SerialType::Text(size) => {
+            let mut buf = vec![0u8; size];
+            reader.read_exact(&mut buf);
+            let out_str = String::from_utf8(buf).expect("failed to parse Text to string");
+            Value::Text(out_str)
+        }
+        SerialType::Null => Value::Null,
+    }
+}
+
+#[derive(Clone)]
 enum SerialType {
     Null,
     Int8,
@@ -106,6 +148,24 @@ enum SerialType {
     One,  // schema format 4 or higher
     Blob(usize),
     Text(usize),
+}
+
+impl SerialType {
+    pub fn size(s: Self) -> usize {
+        match s {
+            SerialType::Int8 => 1,
+            SerialType::Int16 => 2,
+            SerialType::Int24 => 3,
+            SerialType::Int32 => 4,
+            SerialType::Int48 => 6,
+            SerialType::Int64 => 8,
+            SerialType::Float64 => 8,
+            SerialType::Zero | SerialType::One => 0,
+            SerialType::Blob(size) => size,
+            SerialType::Text(size) => size,
+            _ => panic!("Invalid serial type"),
+        }
+    }
 }
 
 impl From<u64> for SerialType {
@@ -131,6 +191,14 @@ impl From<u64> for SerialType {
             }
         }
     }
+}
+
+enum Value {
+    Null,
+    Int(i64),
+    Float(f64),
+    Text(String),
+    Blob(Vec<u8>),
 }
 
 struct ColumnHeader {
@@ -211,17 +279,17 @@ fn main() -> Result<()> {
     let command = &args[2];
 
     let mut file = File::open(&args[1])?;
-    let dbheader = Dbheader::parse(&mut file)?;
-    let btreeheader = BTreeHeader::parse(&mut file)?;
+    let db_header = Dbheader::parse(&mut file)?;
+    let page_header = BTreeHeader::parse(&mut file)?;
 
     match command.as_str() {
         ".dbinfo" => {
-            println!("database page size: {}", dbheader.page_size);
-            println!("number of tables: {}", btreeheader.cell_count);
+            println!("database page size: {}", db_header.page_size);
+            println!("number of tables: {}", page_header.cell_count);
         }
         "table" => {
             let mut cell_pointers: Vec<u16> = vec![];
-            for _ in 0..btreeheader.cell_count {
+            for _ in 0..page_header.cell_count {
                 let mut buf = [0; 2];
                 file.read_exact(&mut buf)?;
                 cell_pointers.push(u16::from_be_bytes(buf));
