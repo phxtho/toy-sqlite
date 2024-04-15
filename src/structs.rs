@@ -65,6 +65,7 @@ pub enum SerialType {
 }
 
 impl SerialType {
+    // return the number of bytes to represent this type sqlite file
     pub fn size(s: Self) -> usize {
         match s {
             SerialType::Int8 => 1,
@@ -106,7 +107,7 @@ impl From<u64> for SerialType {
         }
     }
 }
-
+#[derive(PartialEq, Debug)]
 pub enum Value {
     Null,
     Int(i64),
