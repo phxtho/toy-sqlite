@@ -33,6 +33,7 @@ pub struct BTreeHeader {
 }
 
 pub struct RecordHeader {
+    // size of the row excluding the bytes to represent the header
     pub size: u64,
     pub row_id: u64,
 }
@@ -48,7 +49,7 @@ pub struct ColumnHeader {
     pub column_types: Vec<SerialType>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum SerialType {
     Null,
     Int8,
@@ -93,8 +94,10 @@ impl From<u64> for SerialType {
             4 => SerialType::Int32,
             5 => SerialType::Int48,
             6 => SerialType::Int64,
+            7 => SerialType::Float64,
             8 => SerialType::Zero,
             9 => SerialType::One,
+            10 | 11 => panic!("Serial type for internal use"),
             value => {
                 if value >= 12 && value % 2 == 0 {
                     SerialType::Blob(((value - 12) / 2) as usize)
