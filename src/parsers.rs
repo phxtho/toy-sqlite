@@ -46,7 +46,7 @@ fn parse_value<T: Read>(reader: &mut T, serial_type: SerialType) -> Value {
 }
 
 #[cfg(test)]
-mod parser_tests {
+mod parse_values_tests {
     use std::io::Cursor;
 
     use super::*;
@@ -109,7 +109,7 @@ impl Record {
     }
 }
 #[cfg(test)]
-mod record_tests {
+mod parse_record_tests {
     use std::io::Cursor;
 
     use crate::structs::{Record, SerialType, Value};
@@ -154,7 +154,7 @@ impl ColumnHeader {
 
 impl BTreeHeader {
     pub fn parse<T: Read>(reader: &mut T) -> Result<BTreeHeader, Error> {
-        let mut buf = [0; 12];
+        let mut buf = [0; 1];
         reader.read_exact(&mut buf)?;
         let page_type: BTreePageType = match buf[0] {
             0x02 => BTreePageType::InteriorIndex,
@@ -164,22 +164,60 @@ impl BTreeHeader {
             _ => bail!("Invalid B-Tree Page Type"),
         };
 
+        let remaining_header_size = match page_type {
+            BTreePageType::InteriorTable | BTreePageType::InteriorIndex => 11,
+            BTreePageType::LeafIndex | BTreePageType::LeafTable => 7,
+        };
+
+        let mut buf = vec![0; remaining_header_size];
+        reader.read_exact(&mut buf)?;
+
         // The four-byte page number at offset 8 is the right-most pointer.
         // This value appears in the header of interior b-tree pages only and is omitted from all other pages.
         let rightmost_pointer = match page_type {
-            BTreePageType::InteriorIndex | BTreePageType::InteriorTable => Some(
-                u32::from_be_bytes(buf[8..12].try_into().expect("incorrect range size")),
-            ),
+            BTreePageType::InteriorIndex | BTreePageType::InteriorTable => {
+                Some(u32::from_be_bytes(
+                    buf[remaining_header_size - 4..remaining_header_size]
+                        .try_into()
+                        .expect("incorrect range size"),
+                ))
+            }
             BTreePageType::LeafIndex | BTreePageType::LeafTable => None,
         };
 
         Ok(BTreeHeader {
             page_type,
-            first_free_block: u16::from_be_bytes([buf[1], buf[2]]),
-            cell_count: u16::from_be_bytes([buf[3], buf[4]]),
-            cell_content_offset: u16::from_be_bytes([buf[5], buf[6]]),
-            fragmented_free_bytes: u8::from_be_bytes([buf[7]]),
+            first_free_block: u16::from_be_bytes([buf[0], buf[1]]),
+            cell_count: u16::from_be_bytes([buf[2], buf[3]]),
+            cell_content_offset: u16::from_be_bytes([buf[4], buf[5]]),
+            fragmented_free_bytes: u8::from_be_bytes([buf[6]]),
             rightmost_pointer,
         })
+    }
+}
+
+#[cfg(test)]
+mod parse_btreeheader_tests {
+    use std::io::Cursor;
+
+    use crate::structs::{BTreeHeader, BTreePageType};
+    #[test]
+    fn test_parsing_leaftable_header() {
+        let mut reader = Cursor::new(vec![0x0d, 0x0, 0x0, 0x0, 0x3, 0x0, 0x0, 0x0]);
+        let btree_header = BTreeHeader::parse(&mut reader).expect("Couldn't parse BTreeHeader");
+        assert_eq!(btree_header.page_type, BTreePageType::LeafTable);
+        assert_eq!(btree_header.cell_count, 3);
+        assert_eq!(btree_header.rightmost_pointer, None);
+    }
+
+    #[test]
+    fn test_parsing_interiortable_header() {
+        let mut reader = Cursor::new(vec![
+            0x05, 0x0, 0x0, 0x0, 0x3, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1,
+        ]);
+        let btree_header = BTreeHeader::parse(&mut reader).expect("Couldn't parse BTreeHeader");
+        assert_eq!(btree_header.page_type, BTreePageType::InteriorTable);
+        assert_eq!(btree_header.cell_count, 3);
+        assert_eq!(btree_header.rightmost_pointer, Some(1));
     }
 }

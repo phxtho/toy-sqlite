@@ -15,7 +15,7 @@ impl Dbheader {
         });
     }
 }
-
+#[derive(PartialEq, Debug)]
 pub enum BTreePageType {
     InteriorIndex,
     InteriorTable,
