@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use sqlite_starter_rust::structs::{BTreeHeader, Dbheader, Record};
+use sqlite_starter_rust::structs::{BTreeHeader, Dbheader, Record, Value};
 use std::fs::File;
 use std::io::{prelude::*, SeekFrom};
 
@@ -24,7 +24,7 @@ fn main() -> Result<()> {
             println!("database page size: {}", db_header.page_size);
             println!("number of tables: {}", page_header.cell_count);
         }
-        "table" => {
+        ".table" => {
             let mut cell_pointers: Vec<u16> = vec![];
             for _ in 0..page_header.cell_count {
                 let mut buf = [0; 2];
@@ -39,6 +39,21 @@ fn main() -> Result<()> {
                 let record = Record::parse(&mut file);
                 records.push(record)
             }
+
+            // sqlite_schema(type,name,tbl_name,rootpage,sql)
+            let mut tbl_names: Vec<String> = Vec::new();
+            for r in records {
+                match &r.values[2] {
+                    &Value::Text(ref tbl_name) => {
+                        if !tbl_name.starts_with("sql") {
+                            tbl_names.push(tbl_name.to_string())
+                        }
+                    }
+                    _ => bail!("Expected tbl_name value type to be Text"),
+                }
+            }
+
+            println!("{}", tbl_names.join("\t"));
         }
         _ => bail!("Missing or invalid command passed: {}", command),
     }

@@ -26,7 +26,7 @@ pub enum BTreePageType {
 pub struct BTreeHeader {
     pub page_type: BTreePageType,
     pub first_free_block: u16,
-    pub cell_count: u16,
+    pub cell_count: u16, // how many records exist on this page
     pub cell_content_offset: u16,
     pub fragmented_free_bytes: u8,
     pub rightmost_pointer: Option<u32>,
