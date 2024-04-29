@@ -24,7 +24,7 @@ fn main() -> Result<()> {
             println!("database page size: {}", db_header.page_size);
             println!("number of tables: {}", page_header.cell_count);
         }
-        ".table" => {
+        ".tables" => {
             let mut cell_pointers: Vec<u16> = vec![];
             for _ in 0..page_header.cell_count {
                 let mut buf = [0; 2];
