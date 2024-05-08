@@ -1,4 +1,10 @@
+pub mod btree_header;
+pub mod column_header;
+pub mod db_header;
 pub mod parsers;
+pub mod record;
+pub mod record_header;
 pub mod schema_table;
-pub mod structs;
+pub mod serial_type;
+pub mod serial_value;
 pub mod utils;

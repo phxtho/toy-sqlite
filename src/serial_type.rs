@@ -1,57 +1,3 @@
-use std::io::Read;
-
-use anyhow::Error;
-
-pub struct Dbheader {
-    pub page_size: u16,
-}
-pub const DB_HEADER_SIZE: usize = 100;
-
-impl Dbheader {
-    pub fn parse<T: Read>(reader: &mut T) -> Result<Dbheader, Error> {
-        let mut buf = [0; DB_HEADER_SIZE];
-        reader.read_exact(&mut buf)?;
-        return Ok(Dbheader {
-            page_size: u16::from_be_bytes([buf[16], buf[17]]),
-        });
-    }
-}
-#[derive(PartialEq, Debug)]
-pub enum BTreePageType {
-    InteriorIndex,
-    InteriorTable,
-    LeafIndex,
-    LeafTable,
-}
-#[allow(dead_code)]
-pub struct BTreeHeader {
-    pub page_type: BTreePageType,
-    pub first_free_block: u16,
-    pub cell_count: u16, // how many records exist on this page
-    pub cell_content_offset: u16,
-    pub fragmented_free_bytes: u8,
-    pub rightmost_pointer: Option<u32>,
-}
-
-#[derive(Clone)]
-pub struct RecordHeader {
-    // size of the row excluding the bytes to represent the header
-    pub size: u64,
-    pub row_id: u64,
-}
-#[derive(Clone)]
-pub struct Record {
-    pub header: RecordHeader,
-    pub column_header: ColumnHeader,
-    pub values: Vec<Value>,
-}
-
-#[derive(Clone)]
-pub struct ColumnHeader {
-    pub size: u64, // size of the column header including this field
-    pub column_types: Vec<SerialType>,
-}
-
 #[derive(Clone, PartialEq, Debug)]
 pub enum SerialType {
     Null,
@@ -112,12 +58,4 @@ impl From<u64> for SerialType {
             }
         }
     }
-}
-#[derive(PartialEq, Debug, Clone)]
-pub enum Value {
-    Null,
-    Int(i64),
-    Float(f64),
-    Text(String),
-    Blob(Vec<u8>),
 }

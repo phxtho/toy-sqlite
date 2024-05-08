@@ -1,8 +1,11 @@
 use anyhow::{bail, Error, Result};
 use itertools::Itertools;
 use regex::Regex;
+use sqlite_starter_rust::btree_header::BTreeHeader;
+use sqlite_starter_rust::db_header::Dbheader;
+use sqlite_starter_rust::parsers::Parse;
+use sqlite_starter_rust::record::Record;
 use sqlite_starter_rust::schema_table::SchemaRecord;
-use sqlite_starter_rust::structs::{BTreeHeader, Dbheader, Record};
 use std::fs::File;
 use std::io::{prelude::*, SeekFrom};
 
@@ -21,8 +24,8 @@ fn main() -> Result<()> {
     let re_select_count = Regex::new(r"(?i)^SELECT\s+COUNT\(\*\)\s+FROM\s+(\w+)$").unwrap();
 
     let mut file = File::open(&args[1])?;
-    let db_header = Dbheader::parse(&mut file)?;
-    let root_page_header = BTreeHeader::parse(&mut file)?;
+    let db_header = Dbheader::parse(&mut file);
+    let root_page_header = BTreeHeader::parse(&mut file);
     let cell_pointers = read_cell_pointer(&mut file, root_page_header.cell_count)?;
 
     match command {
@@ -57,7 +60,7 @@ fn main() -> Result<()> {
                     let pos = (rec.rootpage - 1) as u64 * db_header.page_size as u64;
                     file.seek(SeekFrom::Start(pos)).expect("couldn't find page");
                     // Read page
-                    let page_header = BTreeHeader::parse(&mut file)?;
+                    let page_header = BTreeHeader::parse(&mut file);
                     // Output cell count of the page or parse the table and output number of records ?
                     println!("{}", page_header.cell_count);
                 }
