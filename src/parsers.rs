@@ -19,9 +19,9 @@ fn parse_value<T: Read>(reader: &mut T, serial_type: SerialType) -> Value {
             let buffer_size = min(SerialType::size(serial_type), MAX_SIZE);
             let mut buf = vec![0u8; buffer_size];
             let _ = reader.read_exact(&mut buf);
-            let mut array = [0u8; MAX_SIZE];
-            array[MAX_SIZE - buffer_size..MAX_SIZE].copy_from_slice(&buf[..buffer_size]);
-            Value::Int(i64::from_be_bytes(array))
+            let mut byte_array = [0u8; MAX_SIZE];
+            byte_array[MAX_SIZE - buffer_size..MAX_SIZE].copy_from_slice(&buf[..buffer_size]);
+            Value::Int(i64::from_be_bytes(byte_array))
         }
         SerialType::Zero => Value::Int(0),
         SerialType::One => Value::Int(1),

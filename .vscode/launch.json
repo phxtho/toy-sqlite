@@ -33,7 +33,7 @@
           "kind": "bin"
         }
       },
-      "args": ["sample.db", ".table"],
+      "args": ["sample.db", ".tables"],
       "cwd": "${workspaceFolder}"
     },
     {
