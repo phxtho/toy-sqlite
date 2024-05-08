@@ -1,4 +1,5 @@
 pub mod btree_header;
+pub mod btree_page;
 pub mod column_header;
 pub mod db_header;
 pub mod parsers;
