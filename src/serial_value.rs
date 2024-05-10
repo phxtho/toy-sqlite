@@ -1,4 +1,4 @@
-use std::{cmp::min, io::Read};
+use std::{cmp::min, fmt::Display, io::Read};
 
 use crate::serial_type::SerialType;
 
@@ -9,6 +9,17 @@ pub enum SerialValue {
     Float(f64),
     Text(String),
     Blob(Vec<u8>),
+}
+impl Display for SerialValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SerialValue::Null => write!(f, "null"),
+            SerialValue::Int(value) => write!(f, "{}", value),
+            SerialValue::Float(value) => write!(f, "{}", value),
+            SerialValue::Text(value) => write!(f, "{}", value),
+            SerialValue::Blob(value) => write!(f, "{:?}", value),
+        }
+    }
 }
 
 pub fn parse_value<T: Read>(reader: &mut T, serial_type: SerialType) -> SerialValue {
