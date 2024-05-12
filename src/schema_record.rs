@@ -6,7 +6,7 @@ pub struct SchemaRecord {
     pub db_object: DbObject,
     pub name: String,
     pub tbl_name: String,
-    pub rootpage: i64,
+    pub rootpage: i64, // pages are 1-indexed
     pub sql: String,
 }
 

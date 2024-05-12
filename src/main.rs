@@ -102,10 +102,17 @@ fn select_column(
                 find_column_index(rec.sql.as_str(), col_name).expect("couldn't find column name");
 
             // Jump to page with table
-            let pos = (rec.rootpage - 1) as u64 * db_header.page_size as u64;
-            file.seek(SeekFrom::Start(pos)).expect("couldn't find page");
+            let page_pointer = (rec.rootpage - 1) as u64 * db_header.page_size as u64;
+            file.seek(SeekFrom::Start(page_pointer))
+                .expect("couldn't find page");
             let page = BTreePage::parse(file);
-            let table = Table::new(file, page.cell_pointers);
+            // add the page offset to the cell pointers
+            let cell_pointers = page
+                .cell_pointers
+                .iter()
+                .map(|p| p + page_pointer as u16)
+                .collect_vec();
+            let table = Table::new(file, cell_pointers);
 
             // find the column values in the table
             let col_values = table
