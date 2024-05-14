@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     let command = args[2].as_str();
 
     let re_select_count = Regex::new(r"(?i)^SELECT\s+COUNT\(\*\)\s+FROM\s+(\w+)$").unwrap();
-    let re_select = Regex::new(r"(?i)^SELECT\s+(\w+)\s+FROM\s+(\w+)$").unwrap();
+    let re_select = Regex::new(r"(?i)^SELECT\s+(.+)\s+FROM\s+(\w+)$").unwrap();
     let mut file = File::open(&args[1])?;
     let db_header = Dbheader::parse(&mut file);
     let root_page = BTreePage::parse(&mut file);
@@ -39,9 +39,14 @@ fn main() -> Result<()> {
         }
         cmd if re_select.is_match(cmd) => {
             let caps = re_select.captures(cmd).unwrap();
-            let col_name = caps.get(1).map_or("", |m| m.as_str());
+            let col_names = caps
+                .get(1)
+                .map_or("", |m| m.as_str())
+                .split(",")
+                .map(|col| col.trim())
+                .collect_vec();
             let table_name = caps.get(2).map_or("", |m| m.as_str());
-            select_column(db_header, root_page, &mut file, table_name, col_name);
+            select_column(db_header, root_page, &mut file, table_name, col_names);
         }
         _ => bail!("Missing or invalid command passed: {}", command),
     }
@@ -89,7 +94,7 @@ fn select_column(
     root_page: BTreePage,
     file: &mut File,
     table_name: &str,
-    col_name: &str,
+    col_names: Vec<&str>,
 ) {
     let schema_table = SchemaTable::new(file, root_page.cell_pointers);
     match schema_table
@@ -98,8 +103,9 @@ fn select_column(
         .find(|rec| rec.tbl_name == table_name)
     {
         Some(rec) => {
-            let col_idx =
-                find_column_index(rec.sql.as_str(), col_name).expect("couldn't find column name");
+            let col_idxs = col_names.iter().map(|col_name| {
+                find_column_index(rec.sql.as_str(), col_name).expect("couldn't find column name")
+            });
 
             // Jump to page with table
             let page_pointer = (rec.rootpage - 1) as u64 * db_header.page_size as u64;
@@ -119,9 +125,14 @@ fn select_column(
                 .records
                 .iter()
                 .map(|rec| {
-                    rec.values
-                        .get(col_idx)
-                        .expect("failed to find column index")
+                    col_idxs
+                        .clone()
+                        .map(|col_idx| {
+                            rec.values
+                                .get(col_idx)
+                                .expect("failed to find column index")
+                        })
+                        .join("|")
                 })
                 .join("\n");
             println!("{}", col_values);
