@@ -1,6 +1,9 @@
 use std::io::Read;
 
-use crate::{parsers::Parse, serial_type::SerialType, utils::read_varint};
+use crate::data_model::{
+    serial_type::SerialType,
+    serialisation::{read_varint, Deserialize},
+};
 
 #[derive(Clone)]
 pub struct ColumnHeader {
@@ -8,8 +11,8 @@ pub struct ColumnHeader {
     pub column_types: Vec<SerialType>,
 }
 
-impl Parse for ColumnHeader {
-    fn parse<T: Read>(reader: &mut T) -> Self {
+impl Deserialize for ColumnHeader {
+    fn deserialize<T: Read>(reader: &mut T) -> Self {
         let (size, b) = read_varint(reader);
         let mut bytes_read = b;
         let mut column_types: Vec<SerialType> = vec![];

@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use crate::parsers::Parse;
+use crate::data_model::serialisation::Deserialize;
 
 #[derive(PartialEq, Debug)]
 pub enum BTreePageType {
@@ -19,8 +19,8 @@ pub struct BTreeHeader {
     pub rightmost_pointer: Option<u32>,
 }
 
-impl Parse for BTreeHeader {
-    fn parse<T: Read>(reader: &mut T) -> BTreeHeader {
+impl Deserialize for BTreeHeader {
+    fn deserialize<T: Read>(reader: &mut T) -> BTreeHeader {
         let mut buf = [0; 1];
         reader
             .read_exact(&mut buf)
@@ -71,15 +71,15 @@ impl Parse for BTreeHeader {
 mod parse_btreeheader_tests {
     use std::io::Cursor;
 
-    use crate::{
+    use crate::data_model::{
         btree_header::{BTreeHeader, BTreePageType},
-        parsers::Parse,
+        serialisation::Deserialize,
     };
 
     #[test]
-    fn test_parsing_leaftable_header() {
+    fn test_deserializing_leaftable_header() {
         let mut reader = Cursor::new(vec![0x0d, 0x0, 0x0, 0x0, 0x3, 0x0, 0x0, 0x0]);
-        let btree_header = BTreeHeader::parse(&mut reader);
+        let btree_header = BTreeHeader::deserialize(&mut reader);
         assert_eq!(btree_header.page_type, BTreePageType::LeafTable);
         assert_eq!(btree_header.cell_count, 3);
         assert_eq!(btree_header.rightmost_pointer, None);
@@ -90,7 +90,7 @@ mod parse_btreeheader_tests {
         let mut reader = Cursor::new(vec![
             0x05, 0x0, 0x0, 0x0, 0x3, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1,
         ]);
-        let btree_header = BTreeHeader::parse(&mut reader);
+        let btree_header = BTreeHeader::deserialize(&mut reader);
         assert_eq!(btree_header.page_type, BTreePageType::InteriorTable);
         assert_eq!(btree_header.cell_count, 3);
         assert_eq!(btree_header.rightmost_pointer, Some(1));

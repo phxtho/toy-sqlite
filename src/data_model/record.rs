@@ -1,11 +1,10 @@
 use std::io::Read;
 
-use crate::{
+use crate::data_model::{
     column_header::ColumnHeader,
-    parsers::Parse,
     record_header::RecordHeader,
-    serial_value::{parse_value, SerialValue},
-    utils::read_varint,
+    serial_value::{deserialize_value, SerialValue},
+    serialisation::{read_varint, Deserialize},
 };
 
 #[derive(Clone)]
@@ -15,14 +14,14 @@ pub struct Record {
     pub values: Vec<SerialValue>,
 }
 
-impl Parse for Record {
-    fn parse<T: Read>(reader: &mut T) -> Self {
+impl Deserialize for Record {
+    fn deserialize<T: Read>(reader: &mut T) -> Self {
         let (size, _) = read_varint(reader);
         let (row_id, _) = read_varint(reader);
-        let column_header = ColumnHeader::parse(reader);
+        let column_header = ColumnHeader::deserialize(reader);
         let mut values = vec![];
         for serial_type in column_header.column_types.clone() {
-            values.push(parse_value(reader, serial_type))
+            values.push(deserialize_value(reader, serial_type))
         }
         Record {
             header: RecordHeader { size, row_id },
@@ -36,8 +35,9 @@ impl Parse for Record {
 mod parse_record_tests {
     use std::io::Cursor;
 
-    use crate::{
-        parsers::Parse, record::Record, serial_type::SerialType, serial_value::SerialValue,
+    use crate::data_model::{
+        record::Record, serial_type::SerialType, serial_value::SerialValue,
+        serialisation::Deserialize,
     };
 
     #[test]
@@ -47,7 +47,7 @@ mod parse_record_tests {
             0x15, 0x01, 0x05, 0x00, 0x1b, 0x07, 0x01, 0x49, 0x74, 0x61, 0x6c, 0x69, 0x61, 0x6e,
             0x40, 0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
         ]);
-        let record = Record::parse(&mut reader);
+        let record = Record::deserialize(&mut reader);
         assert_eq!(record.header.size, 21);
         assert_eq!(record.header.row_id, 1);
         assert_eq!(record.column_header.size, 5);

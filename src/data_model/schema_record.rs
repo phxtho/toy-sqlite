@@ -1,7 +1,7 @@
-use crate::{record::Record, serial_value::SerialValue};
+use crate::data_model::{record::Record, serial_value::SerialValue};
 
 // The sqlite_schema table contains one record for each table, index, view, and trigger (collectively "objects") in the database schema,
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SchemaRecord {
     pub db_object: DbObject,
     pub name: String,
@@ -10,7 +10,7 @@ pub struct SchemaRecord {
     pub sql: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DbObject {
     Table,
     Index,

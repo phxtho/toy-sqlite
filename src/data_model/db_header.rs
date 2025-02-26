@@ -1,14 +1,14 @@
 use std::io::Read;
 
-use crate::parsers::Parse;
+use crate::data_model::serialisation::Deserialize;
 
 pub struct Dbheader {
     pub page_size: u16,
 }
 pub const DB_HEADER_SIZE: usize = 100;
 
-impl Parse for Dbheader {
-    fn parse<T: Read>(reader: &mut T) -> Dbheader {
+impl Deserialize for Dbheader {
+    fn deserialize<T: Read>(reader: &mut T) -> Dbheader {
         let mut buf = [0; DB_HEADER_SIZE];
         reader
             .read_exact(&mut buf)

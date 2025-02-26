@@ -1,6 +1,6 @@
 use std::io::{Read, Seek, SeekFrom};
 
-use crate::{parsers::Parse, record::Record};
+use crate::data_model::{record::Record, serialisation::Deserialize};
 
 pub struct Table {
     pub records: Vec<Record>,
@@ -14,7 +14,7 @@ impl Table {
             reader
                 .seek(seek_pos)
                 .expect("failed to seek to cell pointer");
-            let record = Record::parse(reader);
+            let record = Record::deserialize(reader);
             records.push(record)
         }
         Table { records }

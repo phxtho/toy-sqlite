@@ -1,15 +1,15 @@
 use std::io::Read;
 
-use crate::{btree_header::BTreeHeader, parsers::Parse};
+use crate::data_model::{btree_header::BTreeHeader, serialisation::Deserialize};
 
 pub struct BTreePage {
     pub header: BTreeHeader,
     pub cell_pointers: Vec<u16>,
 }
 
-impl Parse for BTreePage {
-    fn parse<T: Read>(reader: &mut T) -> Self {
-        let header = BTreeHeader::parse(reader);
+impl Deserialize for BTreePage {
+    fn deserialize<T: Read>(reader: &mut T) -> Self {
+        let header = BTreeHeader::deserialize(reader);
         let cell_pointers = read_cell_pointer(reader, header.cell_count);
         BTreePage {
             header,

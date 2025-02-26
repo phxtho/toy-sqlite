@@ -1,15 +1,16 @@
 use anyhow::{bail, Result};
 use itertools::Itertools;
-use regex::Regex;
-use sqlite_starter_rust::btree_header::BTreeHeader;
-use sqlite_starter_rust::btree_page::BTreePage;
-use sqlite_starter_rust::db_header::Dbheader;
-use sqlite_starter_rust::parsers::Parse;
-use sqlite_starter_rust::schema_table::SchemaTable;
-use sqlite_starter_rust::table::Table;
-use sqlite_starter_rust::utils::find_column_index;
+use sqlite_starter_rust::data_model::{
+    btree_page::BTreePage, db_header::Dbheader, schema_table::SchemaTable,
+    serialisation::Deserialize,
+};
+
+use sqlite_starter_rust::execution_engine::select::ExecutionEngine;
+use sqlite_starter_rust::sql_parser::{
+    lexer::lexer,
+    parser::{Parser, SelectQuery},
+};
 use std::fs::File;
-use std::io::{prelude::*, SeekFrom};
 
 fn main() -> Result<()> {
     // Parse arguments
@@ -23,30 +24,17 @@ fn main() -> Result<()> {
     // Parse command and act accordingly
     let command = args[2].as_str();
 
-    let re_select_count = Regex::new(r"(?i)^SELECT\s+COUNT\(\*\)\s+FROM\s+(\w+)$").unwrap();
-    let re_select = Regex::new(r"(?i)^SELECT\s+(.+)\s+FROM\s+(\w+)$").unwrap();
     let mut file = File::open(&args[1])?;
-    let db_header = Dbheader::parse(&mut file);
-    let root_page = BTreePage::parse(&mut file);
+    let db_header = Dbheader::deserialize(&mut file);
+    let root_page = BTreePage::deserialize(&mut file);
 
     match command {
         ".dbinfo" => dbinfo(db_header, root_page),
         ".tables" => tables(root_page, &mut file),
-        cmd if re_select_count.is_match(cmd) => {
-            let caps = re_select_count.captures(cmd).unwrap();
-            let table_name = caps.get(1).map_or("", |m| m.as_str());
-            select_count(db_header, root_page, &mut file, table_name);
-        }
-        cmd if re_select.is_match(cmd) => {
-            let caps = re_select.captures(cmd).unwrap();
-            let col_names = caps
-                .get(1)
-                .map_or("", |m| m.as_str())
-                .split(",")
-                .map(|col| col.trim())
-                .collect_vec();
-            let table_name = caps.get(2).map_or("", |m| m.as_str());
-            select_column(db_header, root_page, &mut file, table_name, col_names);
+        cmd if !cmd.is_empty() => {
+            let mut execution_engine = ExecutionEngine::new(db_header, &mut file, root_page);
+            let result = execution_engine.run_query(parse_sql(cmd)).unwrap();
+            println!("{}", result);
         }
         _ => bail!("Missing or invalid command passed: {}", command),
     }
@@ -70,75 +58,8 @@ fn tables(root_page: BTreePage, file: &mut File) {
     println!("{}", table_names);
 }
 
-fn select_count(db_header: Dbheader, root_page: BTreePage, file: &mut File, table_name: &str) {
-    let schema_table = SchemaTable::new(file, root_page.cell_pointers);
-    match schema_table
-        .records
-        .iter()
-        .find(|rec| rec.tbl_name == table_name)
-    {
-        Some(rec) => {
-            let pos = (rec.rootpage - 1) as u64 * db_header.page_size as u64;
-            file.seek(SeekFrom::Start(pos)).expect("couldn't find page");
-            let page_header = BTreeHeader::parse(file);
-            println!("{}", page_header.cell_count);
-        }
-        None => {
-            println!("couldn't find table name '{}'", table_name)
-        }
-    };
-}
-
-fn select_column(
-    db_header: Dbheader,
-    root_page: BTreePage,
-    file: &mut File,
-    table_name: &str,
-    col_names: Vec<&str>,
-) {
-    let schema_table = SchemaTable::new(file, root_page.cell_pointers);
-    match schema_table
-        .records
-        .iter()
-        .find(|rec| rec.tbl_name == table_name)
-    {
-        Some(rec) => {
-            let col_idxs = col_names.iter().map(|col_name| {
-                find_column_index(rec.sql.as_str(), col_name).expect("couldn't find column name")
-            });
-
-            // Jump to page with table
-            let page_pointer = (rec.rootpage - 1) as u64 * db_header.page_size as u64;
-            file.seek(SeekFrom::Start(page_pointer))
-                .expect("couldn't find page");
-            let page = BTreePage::parse(file);
-            // add the page offset to the cell pointers
-            let cell_pointers = page
-                .cell_pointers
-                .iter()
-                .map(|p| p + page_pointer as u16)
-                .collect_vec();
-            let table = Table::new(file, cell_pointers);
-
-            // find the column values in the table
-            let col_values = table
-                .records
-                .iter()
-                .map(|rec| {
-                    col_idxs
-                        .clone()
-                        .map(|col_idx| {
-                            rec.values
-                                .get(col_idx)
-                                .expect("failed to find column index")
-                        })
-                        .join("|")
-                })
-                .join("\n");
-            println!("{}", col_values);
-        }
-        None => {
-            println!("couldn't find table name '{}'", table_name)
-        }
-    };
+fn parse_sql(query: &str) -> SelectQuery {
+    let tokens = lexer(query);
+    let mut parser = Parser::new(tokens);
+    parser.parse()
 }

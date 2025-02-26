@@ -1,5 +1,9 @@
 use std::io::Read;
 
+pub trait Deserialize {
+    fn deserialize<T: Read>(reader: &mut T) -> Self;
+}
+
 pub fn read_varint<T: Read>(reader: &mut T) -> (u64, u64) {
     let mut read_more = true;
     let mut result: u64 = 0;
@@ -44,13 +48,10 @@ fn test_read_varint_reading_continuation_bits() {
     assert_eq!(read_varint(&mut buf), (1000, 2));
 }
 
+use anyhow::{anyhow, Context, Error, Result};
 use regex::Regex;
-use std::error::Error;
 
-pub fn find_column_index(
-    create_table_sql: &str,
-    column_name: &str,
-) -> Result<usize, Box<dyn Error>> {
+pub fn get_column_names(create_table_sql: &str) -> Result<Vec<String>, Error> {
     // Normalize by removing extra spaces and line breaks
     let normalized_sql = create_table_sql
         .replace('\n', " ")
@@ -62,28 +63,37 @@ pub fn find_column_index(
     let re = Regex::new(r"\((.*)\)")?;
     let captures = re
         .captures(&normalized_sql)
-        .ok_or("Invalid CREATE TABLE syntax.")?;
+        .context("Invalid CREATE TABLE syntax.")?;
 
     // Extract the columns string
-    let columns_str = captures.get(1).ok_or("No columns found.")?.as_str();
+    let column_definitions = captures.get(1).context("No columns found.")?.as_str();
 
     // Split columns by commas and trim whitespace
-    let columns: Vec<&str> = columns_str.split(',').map(|col| col.trim()).collect();
+    let column_names = column_definitions
+        .split(',')
+        .map(|col_definition| {
+            col_definition
+                .trim()
+                // Assume the column definition starts with the name
+                .split_whitespace()
+                .next()
+                .expect("Invalid column definition.")
+                .to_string()
+        })
+        .collect();
 
+    Ok(column_names)
+}
+
+pub fn find_column_index(ordered_column_names: &Vec<String>, name: &str) -> Result<usize, Error> {
     // Find the index of the given column name
-    for (index, col) in columns.iter().enumerate() {
-        // Assume the column definition starts with the name
-        let col_name = col
-            .split_whitespace()
-            .next()
-            .ok_or("Invalid column definition.")?;
-
-        if col_name.eq_ignore_ascii_case(column_name) {
+    for (index, column_name) in ordered_column_names.iter().enumerate() {
+        if column_name.eq_ignore_ascii_case(name) {
             return Ok(index);
         }
     }
 
-    Err(format!("Column '{}' not found.", column_name).into())
+    Err(anyhow!("Column '{}' not found.", name))
 }
 
 #[test]
@@ -97,7 +107,10 @@ fn test_find_column_index() {
         );
     "#;
 
-    match find_column_index(create_table_sql, "name") {
+    let columns: Vec<String> =
+        get_column_names(create_table_sql).expect("couldn't find column names");
+
+    match find_column_index(&columns, "name") {
         Ok(index) => println!("The index of 'name' is: {}", index),
         Err(e) => eprintln!("Error: {}", e),
     }

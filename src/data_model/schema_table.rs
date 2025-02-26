@@ -2,7 +2,7 @@ use std::io::{Read, Seek};
 
 use itertools::Itertools;
 
-use crate::{schema_record::SchemaRecord, table::Table};
+use crate::data_model::{schema_record::SchemaRecord, table::Table};
 
 pub struct SchemaTable {
     pub records: Vec<SchemaRecord>,
