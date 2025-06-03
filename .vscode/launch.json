@@ -7,11 +7,11 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug unit tests in library 'sqlite-starter-rust'",
+      "name": "Debug unit tests in library 'toy-sqlite'",
       "cargo": {
-        "args": ["test", "--no-run", "--lib", "--package=sqlite-starter-rust"],
+        "args": ["test", "--no-run", "--lib", "--package=toy-sqlite"],
         "filter": {
-          "name": "sqlite-starter-rust",
+          "name": "toy-sqlite",
           "kind": "lib"
         }
       },
@@ -21,34 +21,30 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug executable 'sqlite-starter-rust'",
+      "name": "Debug executable 'toy-sqlite'",
       "cargo": {
-        "args": [
-          "build",
-          "--bin=sqlite-starter-rust",
-          "--package=sqlite-starter-rust"
-        ],
+        "args": ["build", "--bin=toy-sqlite", "--package=toy-sqlite"],
         "filter": {
-          "name": "sqlite-starter-rust",
+          "name": "toy-sqlite",
           "kind": "bin"
         }
       },
-      "args": ["sample.db", ".tables"],
+      "args": ["superheroes.db", "SELECT * FROM superheroes"],
       "cwd": "${workspaceFolder}"
     },
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug unit tests in executable 'sqlite-starter-rust'",
+      "name": "Debug unit tests in executable 'toy-sqlite'",
       "cargo": {
         "args": [
           "test",
           "--no-run",
-          "--bin=sqlite-starter-rust",
-          "--package=sqlite-starter-rust"
+          "--bin=toy-sqlite",
+          "--package=toy-sqlite"
         ],
         "filter": {
-          "name": "sqlite-starter-rust",
+          "name": "toy-sqlite",
           "kind": "bin"
         }
       },

@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use crate::data_model::serialisation::Deserialize;
+use crate::serialisation::deserialize::Deserialize;
 
 pub struct Dbheader {
     pub page_size: u16,

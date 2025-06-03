@@ -1,16 +1,16 @@
 use anyhow::{bail, Result};
 use itertools::Itertools;
-use sqlite_starter_rust::data_model::{
-    btree_page::BTreePage, db_header::Dbheader, schema_table::SchemaTable,
-    serialisation::Deserialize,
-};
+use toy_sqlite::data_model::btree::page::Page;
+use toy_sqlite::data_model::table::Table;
+use toy_sqlite::data_model::{db_header::Dbheader, schema_record::SchemaRecord};
 
-use sqlite_starter_rust::execution_engine::select::ExecutionEngine;
-use sqlite_starter_rust::sql_parser::{
+use std::fs::File;
+use toy_sqlite::pager::pager::Pager;
+use toy_sqlite::query_engine::engine::QueryEngine;
+use toy_sqlite::sql_parser::{
     lexer::lexer,
     parser::{Parser, SelectQuery},
 };
-use std::fs::File;
 
 fn main() -> Result<()> {
     // Parse arguments
@@ -25,15 +25,14 @@ fn main() -> Result<()> {
     let command = args[2].as_str();
 
     let mut file = File::open(&args[1])?;
-    let db_header = Dbheader::deserialize(&mut file);
-    let root_page = BTreePage::deserialize(&mut file);
+    let pager = Pager::new(&mut file)?;
 
     match command {
-        ".dbinfo" => dbinfo(db_header, root_page),
-        ".tables" => tables(root_page, &mut file),
+        ".dbinfo" => dbinfo(pager.db_header, pager.root_page),
+        ".tables" => tables(pager.schema_table),
         cmd if !cmd.is_empty() => {
-            let mut execution_engine = ExecutionEngine::new(db_header, &mut file, root_page);
-            let result = execution_engine.run_query(parse_sql(cmd)).unwrap();
+            let mut query_engine = QueryEngine::new(pager);
+            let result = query_engine.run_query(parse_sql(cmd)).unwrap();
             println!("{}", result);
         }
         _ => bail!("Missing or invalid command passed: {}", command),
@@ -42,16 +41,17 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn dbinfo(db_header: Dbheader, root_page: BTreePage) {
+fn dbinfo(db_header: Dbheader, root_page: Page) {
     println!("database page size: {}", db_header.page_size);
     println!("number of tables: {}", root_page.header.cell_count);
 }
 
-fn tables(root_page: BTreePage, file: &mut File) {
-    let schema_table = SchemaTable::new(file, root_page.cell_pointers);
+fn tables(schema_table: Table<SchemaRecord>) {
     let table_names = schema_table
-        .records
+        .cells
         .iter()
+        // sqlite_schema table has alternate names such as 'sql_master' or 'sqlite_temp_schema'
+        // https://www.sqlite.org/schematab.html#alternative_names
         .filter(|rec| !rec.tbl_name.starts_with("sql"))
         .map(|r| r.tbl_name.clone())
         .join(" ");

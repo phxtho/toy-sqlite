@@ -1,17 +1,17 @@
 use std::io::Read;
 
-use crate::data_model::{
-    serial_type::SerialType,
-    serialisation::{read_varint, Deserialize},
+use crate::{
+    data_model::btree::serial_type::SerialType,
+    serialisation::{deserialize::Deserialize, varint::read_varint},
 };
 
 #[derive(Clone)]
-pub struct ColumnHeader {
+pub struct RecordHeader {
     pub size: u64, // size of the column header including this field
     pub column_types: Vec<SerialType>,
 }
 
-impl Deserialize for ColumnHeader {
+impl Deserialize for RecordHeader {
     fn deserialize<T: Read>(reader: &mut T) -> Self {
         let (size, b) = read_varint(reader);
         let mut bytes_read = b;
@@ -23,6 +23,8 @@ impl Deserialize for ColumnHeader {
             column_types.push(SerialType::from(type_encoding));
         }
 
-        return ColumnHeader { size, column_types };
+        assert_eq!(bytes_read, size);
+
+        return RecordHeader { size, column_types };
     }
 }

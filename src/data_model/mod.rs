@@ -1,12 +1,4 @@
-pub mod btree_header;
-pub mod btree_page;
-pub mod column_header;
+pub mod btree;
 pub mod db_header;
-pub mod record;
-pub mod record_header;
 pub mod schema_record;
-pub mod schema_table;
-pub mod serial_type;
-pub mod serial_value;
-pub mod serialisation;
 pub mod table;

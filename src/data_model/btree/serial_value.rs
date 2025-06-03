@@ -1,6 +1,6 @@
 use std::{cmp::min, fmt::Display, io::Read};
 
-use crate::data_model::serial_type::SerialType;
+use crate::data_model::btree::serial_type::SerialType;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum SerialValue {
@@ -13,7 +13,7 @@ pub enum SerialValue {
 impl Display for SerialValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SerialValue::Null => write!(f, "null"),
+            SerialValue::Null => write!(f, ""),
             SerialValue::Int(value) => write!(f, "{}", value),
             SerialValue::Float(value) => write!(f, "{}", value),
             SerialValue::Text(value) => write!(f, "{}", value),
@@ -64,7 +64,7 @@ pub fn deserialize_value<T: Read>(reader: &mut T, serial_type: SerialType) -> Se
 mod parse_values_tests {
     use std::io::Cursor;
 
-    use crate::data_model::serial_type::SerialType;
+    use crate::data_model::btree::serial_type::SerialType;
 
     use super::*;
     #[test]

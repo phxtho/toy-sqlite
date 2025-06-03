@@ -1,17 +1,20 @@
 use std::io::Read;
 
-use crate::data_model::{btree_header::BTreeHeader, serialisation::Deserialize};
+use crate::serialisation::deserialize::Deserialize;
 
-pub struct BTreePage {
-    pub header: BTreeHeader,
+use super::page_header::PageHeader;
+
+#[derive(Clone)]
+pub struct Page {
+    pub header: PageHeader,
     pub cell_pointers: Vec<u16>,
 }
 
-impl Deserialize for BTreePage {
+impl Deserialize for Page {
     fn deserialize<T: Read>(reader: &mut T) -> Self {
-        let header = BTreeHeader::deserialize(reader);
+        let header = PageHeader::deserialize(reader);
         let cell_pointers = read_cell_pointer(reader, header.cell_count);
-        BTreePage {
+        Page {
             header,
             cell_pointers,
         }
